@@ -1,4 +1,5 @@
-from typing import Iterator, Tuple
+from __future__ import annotations
+from typing import Iterator, List, Tuple, TYPE_CHECKING
 
 from game_map import GameMap
 import tile_types
@@ -6,20 +7,46 @@ import tile_types
 import tcod
 import random
 
+if TYPE_CHECKING:
+    from entity import Entity
 
-def generate_dungeon(map_width, map_height) -> GameMap:
+
+def generate_dungeon(
+    max_rooms: int,
+    room_min_size: int,
+    room_max_size: int,
+    map_width: int,
+    map_height: int,
+    player: Entity,
+) -> GameMap:
     dungeon = GameMap(map_width, map_height)
+    rooms: List[RectangularRoom] = []
 
-    room1 = RectangularRoom(x=20, y=15, width=10, height=15)
-    room2 = RectangularRoom(x=35, y=15, width=10, height=15)
+    for r in range(max_rooms):
+        room_width = random.randint(room_min_size, room_max_size)
+        room_height = random.randint(room_min_size, room_max_size)
 
-    dungeon.tiles[room1.inner] = tile_types.floor
-    dungeon.tiles[room2.inner] = tile_types.floor
+        x = random.randint(0, dungeon.width - room_width - 1)
+        y = random.randint(0, dungeon.height - room_height - 1)
 
-    for x, y in tunnel_between(room1.center, room2.center):
-        dungeon.tiles[x, y] = tile_types.floor
+        new_room = RectangularRoom(x, y, room_width, room_height)
+
+        if any(new_room.intersects(other_room) for other_room in rooms):
+            continue
+
+        dungeon.tiles[new_room.inner] = tile_types.floor
+
+        if len(rooms) == 0:
+            player.x, player.y = new_room.center
+        else:
+            for x, y in tunnel_between(rooms[-1].center, new_room.center):
+                dungeon.tiles[x, y] = tile_types.floor
+
+        rooms.append(new_room)
 
     return dungeon
+
+
 
 
 def tunnel_between(start: Tuple[int, int], end: Tuple[int, int]) -> Iterator[Tuple[int, int]]:
@@ -51,5 +78,12 @@ class RectangularRoom:
 
     @property
     def inner(self) -> Tuple[slice, slice]:
-        """Return the inner area of this room as a 2D array index."""
         return slice(self.x1 + 1, self.x2), slice(self.y1 + 1, self.y2)
+
+    def intersects(self, other: RectangularRoom) -> bool:
+        return (
+            self.x1 <= other.x2
+            and self.x2 >= other.x1
+            and self.y1 <= other.y2
+            and self.y2 >= other.y1
+        )
